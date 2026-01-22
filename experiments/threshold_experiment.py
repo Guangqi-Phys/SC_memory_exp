@@ -37,6 +37,7 @@ from surface_code_experiment.config.experiment_config import (
     ERROR_RATES,
     MAX_SHOTS,
     MAX_ERRORS,
+    NUM_WORKERS,
 )
 
 
@@ -248,8 +249,8 @@ def main():
     parser.add_argument(
         '--workers',
         type=int,
-        default=10,
-        help='Number of parallel workers for sinter (default: 10)'
+        default=NUM_WORKERS,
+        help=f'Number of parallel workers for sinter (default: {NUM_WORKERS} from config)'
     )
     parser.add_argument(
         '--max-shots',

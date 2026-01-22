@@ -10,6 +10,9 @@ TAU_ROUNDS = 5
 N_SLIDING_WINDOW = 5  # Window size (n_sliding_window) for sliding window decoding
 N_OVERLAP = 0  # Overlap between consecutive windows
 
+# Number of parallel workers for pymatching/sinter
+NUM_WORKERS = 10  # Number of parallel workers for sinter.collect
+
 # Default error rates for threshold experiments
 ERROR_RATES = [0.001, 0.003, 0.005, 0.006, 0.007]
 
