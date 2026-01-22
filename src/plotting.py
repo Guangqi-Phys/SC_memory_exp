@@ -64,7 +64,7 @@ def plot_threshold(
     )
     
     # Set plot limits and scale
-    ax.set_ylim(1e-5, 1e-1)
+    ax.set_ylim(1e-10, 1e-1)
     ax.set_xlim(1e-3, 0.007)
     ax.loglog()
     

@@ -1,14 +1,14 @@
 # surface_code_experiment/config/experiment_config.py
 
 # Default code distances for threshold experiments
-L_VALUES = [3,5,7]
+L_VALUES = [27, 29, 31]
 
 # Number of measurement rounds (tau)
-TAU_ROUNDS = 80
+TAU_ROUNDS = 5
 
 # Sliding window decoding parameters
-N_SLIDING_WINDOW = 20  # Window size (n_sliding_window) for sliding window decoding
-N_OVERLAP = 10  # Overlap between consecutive windows
+N_SLIDING_WINDOW = 5  # Window size (n_sliding_window) for sliding window decoding
+N_OVERLAP = 0  # Overlap between consecutive windows
 
 # Default error rates for threshold experiments
 ERROR_RATES = [0.001, 0.003, 0.005, 0.006, 0.007]
@@ -18,9 +18,9 @@ ERROR_RATES = [0.001, 0.003, 0.005, 0.006, 0.007]
 # At low error rates, fewer errors are needed for good statistical confidence
 # At high error rates, more errors are needed (especially with many rounds)
 # Baseline: 200 rounds, error_rate=0.01 (1%) with 50,000 errors
-BASELINE_ROUNDS = 40
+BASELINE_ROUNDS = 1
 BASELINE_ERROR_RATE = 0.01  # 1% - reference error rate
-BASELINE_MAX_ERRORS = 100_000
+BASELINE_MAX_ERRORS = 1_00_000
 BASELINE_MAX_SHOTS = 10_000_000
 
 def calculate_max_errors(error_rate: float, tau_rounds: int) -> int:
@@ -71,12 +71,14 @@ def calculate_max_errors(error_rate: float, tau_rounds: int) -> int:
     tau_power = 1.0  # Linear scaling: 2x rounds → 2x errors
     
     tau_scale = (tau_rounds / BASELINE_ROUNDS) ** tau_power
+    # tau_scale = 1.0
     
     # Scale with error_rate (lower rates need fewer errors)
     # Use square (power of 2) to get more aggressive scaling at low rates
     # At error_rate=0.001, we want ~1/100 the errors of error_rate=0.01
     # (0.001/0.01)^2 = 0.1^2 = 0.01 = 1/100
-    error_rate_scale = (error_rate / BASELINE_ERROR_RATE) ** 2
+    error_rate_scale = (error_rate / BASELINE_ERROR_RATE) ** 0.5
+    # error_rate_scale = 1.0
     
     # Combine scales
     max_errors = int(BASELINE_MAX_ERRORS * tau_scale * error_rate_scale)

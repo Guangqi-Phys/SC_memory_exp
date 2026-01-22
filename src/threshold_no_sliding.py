@@ -13,16 +13,16 @@ if grandparent_dir not in sys.path:
     sys.path.insert(0, grandparent_dir)
 
 from surface_code_experiment.src.noise_model import standard_depolarizing_noise_model
-from surface_code_experiment.config.experiment_config import MAX_SHOTS, MAX_ERRORS
+
 
 if __name__ == '__main__':
     surface_code_tasks = []
-    for d in [3, 5, 7]:
-        for noise in [0.001, 0.003, 0.005, 0.008, 0.009, 0.01, 0.015]:
+    for d in [21]:
+        for noise in [0.001, 0.003, 0.005, 0.006, 0.007]:
             # Generate noiseless surface code circuit
             circuit = stim.Circuit.generated(
                 "surface_code:rotated_memory_z",
-                rounds=d * 3,
+                rounds=20,
                 distance=d,
             )
             
@@ -44,7 +44,7 @@ if __name__ == '__main__':
                 sinter.Task(
                     circuit=noisy_circuit,
                     detector_error_model=dem,
-                    json_metadata={'d': d, 'r': d * 3, 'p': noise},
+                    json_metadata={'d': d, 'r': 20, 'p': noise},
                 )
             )
 
@@ -52,8 +52,8 @@ if __name__ == '__main__':
         num_workers=10,
         tasks=surface_code_tasks,
         decoders=['pymatching'],
-        max_shots=MAX_SHOTS,
-        max_errors=MAX_ERRORS,
+        max_shots=1_000_000,
+        max_errors=100_000,
         print_progress=True,
     )
 
@@ -66,7 +66,7 @@ if __name__ == '__main__':
         failure_units_per_shot_func=lambda stat: stat.json_metadata['r'],
     )
     ax.set_ylim(1e-5, 1e-1)
-    ax.set_xlim(0.001, 0.015)
+    ax.set_xlim(0.001, 0.01)
     ax.loglog()
     ax.set_title("Surface Code Error Rates per Round under Circuit Noise")
     ax.set_xlabel("Physical Error Rate")
