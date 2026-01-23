@@ -112,6 +112,13 @@ def run_threshold_experiment(
         )
         global_max_shots = max_per_task_shots
         global_max_errors = max_per_task_errors
+        
+        # NOTE: Sinter's progress display uses global max_errors for ALL tasks in the display,
+        # but each task actually uses its own per-task max_errors for stopping.
+        # This means the displayed "errors_left" may be incorrect for tasks with smaller per-task max_errors.
+        # The actual stopping behavior is correct - each task stops at its own per-task max_errors.
+        print(f"NOTE: Progress display shows errors_left using global max_errors={global_max_errors:,}, "
+              f"but each task uses its own per-task max_errors for actual stopping.")
     else:
         print(f"Using global MAX_ERRORS = {max_errors}, MAX_SHOTS = {max_shots}")
         global_max_shots = max_shots
