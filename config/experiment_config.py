@@ -4,7 +4,7 @@
 L_VALUES = [23]
 
 # Number of measurement rounds (tau)
-TAU_ROUNDS = 60
+TAU_ROUNDS = 10
 
 # Sliding window decoding parameters
 N_SLIDING_WINDOW = 10  # Window size (n_sliding_window) for sliding window decoding
