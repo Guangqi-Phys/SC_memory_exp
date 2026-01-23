@@ -6,6 +6,8 @@ import stim
 import pymatching
 import pathlib
 from typing import Optional
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import multiprocessing
 
 # Handle imports for both when used as module and when run directly
 try:
@@ -65,6 +67,7 @@ class SlidingWindowCompiledDecoder(CompiledDecoder):
         n_sliding_window: int,
         n_overlap: int,
         num_observables: int,
+        window_parallel_workers: int = 1,
     ):
         self.matcher = matcher
         self.num_rounds = num_rounds
@@ -72,6 +75,7 @@ class SlidingWindowCompiledDecoder(CompiledDecoder):
         self.n_sliding_window = n_sliding_window
         self.n_overlap = n_overlap
         self.num_observables = num_observables
+        self.window_parallel_workers = window_parallel_workers
         self.num_detectors = num_rounds * num_detectors_per_round
     
     def decode_shots_bit_packed(
@@ -158,20 +162,17 @@ class SlidingWindowCompiledDecoder(CompiledDecoder):
             # The extra overlap on both sides makes the center portion more reliable,
             # but we only keep corrections from the center (non-overlapping) portion.
             
-            # OPTIMIZATION: Track only parity flips per window instead of full observable vectors
-            # For surface codes, we typically have 1 observable, so we can use a single bit accumulator
-            # This is more efficient than array operations: just XOR bits instead of arrays
-            if self.num_observables == 1:
-                # Single observable: use integer XOR for efficiency
-                accumulated_parity = 0
-            else:
-                # Multiple observables: use array (fallback for general case)
-                accumulated_predictions = np.zeros(self.num_observables, dtype=np.uint8)
+            # OPTIMIZATION: Parallelize window decoding by batching all windows together
+            # Instead of decoding windows sequentially, we collect all window syndromes and
+            # decode them in a single batch using PyMatching's optimized decode_batch.
+            # This is more efficient than sequential decoding or multiprocessing because:
+            # 1. PyMatching's decode_batch is already highly optimized
+            # 2. No overhead from process/thread creation
+            # 3. Better memory locality and cache usage
             
-            # Calculate recording windows (the center portions we keep corrections for)
-            # Recording windows: 0-100, 100-200, 200-300, ... (non-overlapping, step by n_sliding_window)
+            # First, collect all window syndromes
+            window_syndrome_vectors = []
             recording_start_round = 0
-            window_num = 0
             
             while recording_start_round < self.num_rounds:
                 # Calculate the recording window (center portion we keep corrections for)
@@ -216,32 +217,55 @@ class SlidingWindowCompiledDecoder(CompiledDecoder):
                 decode_detectors = decode_syndrome_data.flatten()
                 decode_syndrome_vector[decode_start_detector_idx:decode_end_detector_idx] = decode_detectors
                 
-                # Decode the FULL decoding window using PyMatching
-                # The extra overlap on both sides makes the center portion more reliable
-                # PyMatching uses the full graph (all edge weights) but only matches detectors with events
-                decode_2d = decode_syndrome_vector.reshape(1, -1)
-                predicted_observables = self.matcher.decode_batch(decode_2d)
-                
-                # OPTIMIZATION: Track only parity flip per window (single bit for single observable)
-                # Each window contributes a parity flip (0 or 1) that we XOR together
-                # This is equivalent to tracking full corrections but more efficient
-                if self.num_observables == 1:
-                    # Single observable: just XOR the parity bit
-                    # predicted_observables shape is (1, 1) for batch_size=1, num_observables=1
-                    window_parity_flip = predicted_observables[0][0] if predicted_observables.ndim == 2 else predicted_observables[0]
-                    accumulated_parity ^= window_parity_flip
-                else:
-                    # Multiple observables: XOR arrays (fallback)
-                    accumulated_predictions = (accumulated_predictions ^ predicted_observables[0]) % 2
+                # Store this window's syndrome vector for batch decoding
+                window_syndrome_vectors.append(decode_syndrome_vector)
                 
                 # Move to next recording window: step by n_sliding_window
                 # Recording windows: 0-100, 100-200, 200-300, ...
                 recording_start_round += self.n_sliding_window
-                window_num += 1
                 
                 # Break if we've covered all rounds
                 if recording_end_round >= self.num_rounds:
                     break
+            
+            # OPTIMIZATION: Decode all windows using batch processing
+            # PyMatching's decode_batch is highly optimized for batch processing
+            # If window_parallel_workers > 1, we can split into chunks for potential speedup
+            # (though batch processing is usually faster due to better cache usage)
+            if len(window_syndrome_vectors) > 0:
+                if self.window_parallel_workers > 1 and len(window_syndrome_vectors) > self.window_parallel_workers:
+                    # Split into chunks and process in parallel (using threading for shared memory)
+                    predicted_observables_batch = self._decode_windows_chunked(window_syndrome_vectors)
+                else:
+                    # Stack all window syndromes into a 2D array: (num_windows, num_detectors)
+                    batch_syndromes = np.stack(window_syndrome_vectors, axis=0)
+                    
+                    # Decode all windows in one batch call
+                    # predicted_observables shape: (num_windows, num_observables)
+                    predicted_observables_batch = self.matcher.decode_batch(batch_syndromes)
+                
+                # Accumulate predictions from all windows by XORing
+                # OPTIMIZATION: Track only parity flips per window (single bit for single observable)
+                # Each window contributes a parity flip (0 or 1) that we XOR together
+                # This is equivalent to tracking full corrections but more efficient
+                if self.num_observables == 1:
+                    # Single observable: XOR all window parity flips
+                    # predicted_observables_batch shape is (num_windows, 1)
+                    accumulated_parity = 0
+                    for window_pred in predicted_observables_batch:
+                        window_parity_flip = window_pred[0] if window_pred.ndim > 0 else window_pred
+                        accumulated_parity ^= window_parity_flip
+                else:
+                    # Multiple observables: XOR arrays (fallback)
+                    accumulated_predictions = np.zeros(self.num_observables, dtype=np.uint8)
+                    for window_pred in predicted_observables_batch:
+                        accumulated_predictions = (accumulated_predictions ^ window_pred) % 2
+            else:
+                # Edge case: no windows (shouldn't happen, but handle gracefully)
+                if self.num_observables == 1:
+                    accumulated_parity = 0
+                else:
+                    accumulated_predictions = np.zeros(self.num_observables, dtype=np.uint8)
             
             # Store accumulated predictions for this shot
             # IMPORTANT: This accumulated correction represents the total logical observable prediction
@@ -266,6 +290,54 @@ class SlidingWindowCompiledDecoder(CompiledDecoder):
         )[:, :num_obs_bytes]
         
         return predictions_packed
+    
+    def _decode_windows_chunked(self, window_syndrome_vectors):
+        """
+        Decode windows in chunks using threading (for shared memory access to matcher).
+        
+        This method splits windows into chunks and processes them in parallel using threads.
+        Note: Batch processing is usually faster, but chunking can help with very large batches.
+        
+        Args:
+            window_syndrome_vectors: List of syndrome vectors, one per window
+            
+        Returns:
+            Array of predicted observables, shape (num_windows, num_observables)
+        """
+        import threading
+        
+        num_windows = len(window_syndrome_vectors)
+        workers = min(self.window_parallel_workers, num_windows)
+        
+        # Split windows into chunks for each worker
+        chunk_size = max(1, num_windows // workers)
+        chunks = [window_syndrome_vectors[i:i+chunk_size] 
+                  for i in range(0, num_windows, chunk_size)]
+        
+        # Results storage (thread-safe with locks)
+        results = [None] * len(chunks)
+        lock = threading.Lock()
+        
+        def decode_chunk(chunk_idx, chunk):
+            """Decode a chunk of windows in a thread."""
+            chunk_batch = np.stack(chunk, axis=0)
+            chunk_results = self.matcher.decode_batch(chunk_batch)
+            with lock:
+                results[chunk_idx] = chunk_results
+        
+        # Start threads
+        threads = []
+        for chunk_idx, chunk in enumerate(chunks):
+            thread = threading.Thread(target=decode_chunk, args=(chunk_idx, chunk))
+            thread.start()
+            threads.append(thread)
+        
+        # Wait for all threads
+        for thread in threads:
+            thread.join()
+        
+        # Concatenate results in order
+        return np.concatenate(results, axis=0)
 
 
 class SlidingWindowDecoder(Decoder):
@@ -282,6 +354,7 @@ class SlidingWindowDecoder(Decoder):
         n_sliding_window: int,
         n_overlap: int,
         num_rounds: Optional[int] = None,
+        window_parallel_workers: int = 1,
     ):
         """
         Initialize the sliding window decoder.
@@ -291,10 +364,14 @@ class SlidingWindowDecoder(Decoder):
             n_overlap: Overlap between consecutive windows
             num_rounds: Total number of measurement rounds (tau). If None, will try to infer
                 from the DEM by assuming detectors are evenly distributed across rounds.
+            window_parallel_workers: Number of workers for window parallelization.
+                Set to 1 for batch processing (default, usually faster).
+                Set to >1 to use threading for chunked parallel processing.
         """
         self.n_sliding_window = n_sliding_window
         self.n_overlap = n_overlap
         self.num_rounds = num_rounds
+        self.window_parallel_workers = window_parallel_workers
     
     def compile_decoder_for_dem(
         self,
@@ -377,6 +454,7 @@ class SlidingWindowDecoder(Decoder):
             n_sliding_window=self.n_sliding_window,
             n_overlap=self.n_overlap,
             num_observables=dem.num_observables,
+            window_parallel_workers=self.window_parallel_workers,
         )
     
     def decode_via_files(

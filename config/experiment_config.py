@@ -1,10 +1,10 @@
 # surface_code_experiment/config/experiment_config.py
 
 # Default code distances for threshold experiments
-L_VALUES = [27, 29, 31]
+L_VALUES = [23]
 
 # Number of measurement rounds (tau)
-TAU_ROUNDS = 10
+TAU_ROUNDS = 60
 
 # Sliding window decoding parameters
 N_SLIDING_WINDOW = 10  # Window size (n_sliding_window) for sliding window decoding
@@ -13,8 +13,15 @@ N_OVERLAP = 0  # Overlap between consecutive windows
 # Number of parallel workers for pymatching/sinter
 NUM_WORKERS = 10  # Number of parallel workers for sinter.collect
 
+# Window parallelization for sliding window decoder
+# Controls how many CPU cores to use for parallelizing window decoding within each shot
+# Set to 1 to disable parallelization (uses batch processing only)
+# Set to >1 to use multiprocessing for window parallelization
+# Recommended: 1-4 (batch processing is usually faster, but multiprocessing can help for many windows)
+WINDOW_PARALLEL_WORKERS = 1  # Number of workers for window parallelization (1 = batch only, >1 = multiprocessing)
+
 # Default error rates for threshold experiments
-ERROR_RATES = [0.003, 0.005, 0.007, 0.009]
+ERROR_RATES = [0.003,0.009]
 
 
 # Adaptive MAX_ERRORS and MAX_SHOTS based on error_rate and tau_round

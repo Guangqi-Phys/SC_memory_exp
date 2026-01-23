@@ -14,6 +14,7 @@ from surface_code_experiment.config.experiment_config import (
     N_OVERLAP,
     MAX_SHOTS,
     MAX_ERRORS,
+    WINDOW_PARALLEL_WORKERS,
 )
 
 
@@ -72,6 +73,7 @@ def run_threshold_experiment(
             n_sliding_window=N_SLIDING_WINDOW,
             n_overlap=N_OVERLAP,
             num_rounds=None,  # Will infer from DEM
+            window_parallel_workers=WINDOW_PARALLEL_WORKERS,
         )
         decoders.append('sliding_window')
     

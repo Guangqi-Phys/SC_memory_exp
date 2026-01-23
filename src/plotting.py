@@ -68,8 +68,8 @@ def plot_threshold(
     )
     
     # Set plot limits and scale
-    ax.set_ylim(1e-10, 1)
-    ax.set_xlim(0.001, 0.01)
+    ax.set_ylim(1e-6, 1)
+    ax.set_xlim(0.003, 0.01)
     ax.loglog()
     
     # Add grid
