@@ -55,17 +55,21 @@ def plot_threshold(
     fig, ax = plt.subplots(1, 1, figsize=(10, 6))
     
     # Plot error rates using sinter's built-in plotting function
+    # Note: highlight_max_likelihood_factor=1000 (default) controls uncertainty region width
+    # For 0 errors, this creates a wide uncertainty region (statistically correct but visually large)
+    # See docs/zero_errors_uncertainty.md for explanation
     sinter.plot_error_rate(
         ax=ax,
         stats=stats,
         x_func=lambda stat: stat.json_metadata.get('error_rate', stat.json_metadata.get('p', 0)),
         group_func=lambda stat: f"L={stat.json_metadata.get('L', stat.json_metadata.get('d', '?'))}",
         failure_units_per_shot_func=lambda stat: stat.json_metadata.get('num_rounds', stat.json_metadata.get('r', 1)),
+        highlight_max_likelihood_factor=1000,  # Default: 1000x max likelihood factor for uncertainty region
     )
     
     # Set plot limits and scale
     ax.set_ylim(1e-10, 1e-1)
-    ax.set_xlim(1e-3, 0.007)
+    ax.set_xlim(0.001, 0.01)
     ax.loglog()
     
     # Add grid

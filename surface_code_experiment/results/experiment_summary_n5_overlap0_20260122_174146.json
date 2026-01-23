@@ -1,0 +1,183 @@
+{
+  "experiment_info": {
+    "timestamp": "2026-01-22T17:41:46.179485",
+    "experiment_type": "Surface Code Threshold Experiment"
+  },
+  "configuration": {
+    "L_values": [
+      27,
+      29,
+      31
+    ],
+    "error_rates": [
+      0.001,
+      0.003,
+      0.005,
+      0.006,
+      0.007
+    ],
+    "num_rounds": 5,
+    "num_workers": 10,
+    "max_shots": 50000000,
+    "max_errors": 500000,
+    "use_sliding_window": true,
+    "compare_with_pymatching": false,
+    "n_sliding_window": 5,
+    "n_overlap": 0
+  },
+  "timing": {
+    "wall_time_seconds": 9663.993664741516,
+    "wall_time_formatted": "2h 41m 3.99s",
+    "cpu_time_user_seconds": 48.425548,
+    "cpu_time_sys_seconds": 1.413209,
+    "cpu_time_total_seconds": 49.838757,
+    "cpu_time_formatted": "0h 0m 49.84s",
+    "cpu_utilization_percent": 0.5157159527311532
+  },
+  "summary_statistics": {
+    "total_tasks": 15,
+    "total_shots": 483440298,
+    "total_errors": 4336671,
+    "total_seconds": 96086.10687936703,
+    "average_shots_per_task": 32229353.2,
+    "average_errors_per_task": 289111.4,
+    "overall_shots_per_second": 50024.89806712126
+  },
+  "per_task_statistics": [
+    {
+      "L": 29,
+      "error_rate": 0.007,
+      "decoder": "sliding_window",
+      "shots": 3013393,
+      "errors": 500150,
+      "seconds": 1819.7895329386229,
+      "shots_per_second": 1655.901930117121
+    },
+    {
+      "L": 29,
+      "error_rate": 0.001,
+      "decoder": "sliding_window",
+      "shots": 50000000,
+      "errors": 0,
+      "seconds": 2227.874940258451,
+      "shots_per_second": 22442.91144735423
+    },
+    {
+      "L": 29,
+      "error_rate": 0.003,
+      "decoder": "sliding_window",
+      "shots": 50000000,
+      "errors": 557,
+      "seconds": 7600.0822811503895,
+      "shots_per_second": 6578.876142434569
+    },
+    {
+      "L": 27,
+      "error_rate": 0.001,
+      "decoder": "sliding_window",
+      "shots": 50000000,
+      "errors": 0,
+      "seconds": 1958.3668915586313,
+      "shots_per_second": 25531.477383283294
+    },
+    {
+      "L": 29,
+      "error_rate": 0.006,
+      "decoder": "sliding_window",
+      "shots": 9145617,
+      "errors": 500039,
+      "seconds": 4257.021735297516,
+      "shots_per_second": 2148.3604192499683
+    },
+    {
+      "L": 27,
+      "error_rate": 0.003,
+      "decoder": "sliding_window",
+      "shots": 50000000,
+      "errors": 1004,
+      "seconds": 6470.0324974333635,
+      "shots_per_second": 7727.9364546986135
+    },
+    {
+      "L": 29,
+      "error_rate": 0.005,
+      "decoder": "sliding_window",
+      "shots": 50000000,
+      "errors": 450515,
+      "seconds": 16262.183768088464,
+      "shots_per_second": 3074.6178196630503
+    },
+    {
+      "L": 27,
+      "error_rate": 0.006,
+      "decoder": "sliding_window",
+      "shots": 8613137,
+      "errors": 500023,
+      "seconds": 3384.189487610827,
+      "shots_per_second": 2545.1107367160785
+    },
+    {
+      "L": 27,
+      "error_rate": 0.005,
+      "decoder": "sliding_window",
+      "shots": 46910259,
+      "errors": 506373,
+      "seconds": 13207.885813349742,
+      "shots_per_second": 3551.6856870905044
+    },
+    {
+      "L": 27,
+      "error_rate": 0.007,
+      "decoder": "sliding_window",
+      "shots": 3018001,
+      "errors": 500153,
+      "seconds": 1532.205603485112,
+      "shots_per_second": 1969.7101962917634
+    },
+    {
+      "L": 31,
+      "error_rate": 0.001,
+      "decoder": "sliding_window",
+      "shots": 50000000,
+      "errors": 0,
+      "seconds": 2542.9499225526815,
+      "shots_per_second": 19662.203945333164
+    },
+    {
+      "L": 31,
+      "error_rate": 0.003,
+      "decoder": "sliding_window",
+      "shots": 50000000,
+      "errors": 233,
+      "seconds": 8651.964069890557,
+      "shots_per_second": 5779.03463261059
+    },
+    {
+      "L": 31,
+      "error_rate": 0.005,
+      "decoder": "sliding_window",
+      "shots": 50000000,
+      "errors": 376585,
+      "seconds": 18681.337580777006,
+      "shots_per_second": 2676.4678805146013
+    },
+    {
+      "L": 31,
+      "error_rate": 0.006,
+      "decoder": "sliding_window",
+      "shots": 9729058,
+      "errors": 500974,
+      "seconds": 5327.945410263725,
+      "shots_per_second": 1826.0431087109107
+    },
+    {
+      "L": 31,
+      "error_rate": 0.007,
+      "decoder": "sliding_window",
+      "shots": 3010833,
+      "errors": 500065,
+      "seconds": 2162.27734471194,
+      "shots_per_second": 1392.4360847433775
+    }
+  ]
+}

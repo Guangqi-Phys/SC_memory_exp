@@ -1,7 +1,7 @@
 # surface_code_experiment/config/experiment_config.py
 
 # Default code distances for threshold experiments
-L_VALUES = [27, 29, 31]
+L_VALUES = [27]
 
 # Number of measurement rounds (tau)
 TAU_ROUNDS = 5
@@ -14,7 +14,7 @@ N_OVERLAP = 0  # Overlap between consecutive windows
 NUM_WORKERS = 10  # Number of parallel workers for sinter.collect
 
 # Default error rates for threshold experiments
-ERROR_RATES = [0.001, 0.003, 0.005, 0.006, 0.007]
+ERROR_RATES = [0.003, 0.005, 0.007, 0.009]
 
 
 # Adaptive MAX_ERRORS based on error_rate and tau_round
@@ -23,8 +23,8 @@ ERROR_RATES = [0.001, 0.003, 0.005, 0.006, 0.007]
 # Baseline: 200 rounds, error_rate=0.01 (1%) with 50,000 errors
 BASELINE_ROUNDS = 1
 BASELINE_ERROR_RATE = 0.01  # 1% - reference error rate
-BASELINE_MAX_ERRORS = 1_00_000
-BASELINE_MAX_SHOTS = 10_000_000
+BASELINE_MAX_ERRORS = 10_000
+BASELINE_MAX_SHOTS = 1_000_000
 
 def calculate_max_errors(error_rate: float, tau_rounds: int) -> int:
     """
@@ -55,33 +55,40 @@ def calculate_max_errors(error_rate: float, tau_rounds: int) -> int:
     Returns:
         Maximum number of errors to collect for this error_rate and tau_rounds
     """
-    # Linear scaling with rounds: more rounds means proportionally more opportunities for errors
-    # 
-    # Note on statistical confidence:
-    # - For RELATIVE error (error_rate_estimate / true_error_rate): Higher error rates need
-    #   FEWER errors for the same relative confidence (better relative precision).
-    # - For ABSOLUTE error (confidence interval width): Higher error rates need MORE errors
-    #   for the same absolute confidence (worse absolute precision).
+    # Scaling with rounds: Should MAX_ERRORS scale with number of rounds?
     #
-    # We use linear scaling because:
-    # 1. Threshold experiments typically care about relative error (comparing error rates)
-    # 2. More rounds = more opportunities for errors, so scale proportionally
-    # 3. The higher error rate at more rounds means we collect errors faster, but we still
-    #    need enough absolute errors for statistical validity
+    # IMPORTANT: MAX_ERRORS is the maximum number of LOGICAL ERRORS (decoder failures) to collect.
+    # Since we're measuring "logical error rate per round" = (errors / shots) / num_rounds,
+    # the question is: do we need more errors for more rounds to maintain the same statistical confidence?
     #
-    # If you find that absolute error is too large at high error rates with many rounds,
-    # you may need to increase BASELINE_MAX_ERRORS or use superlinear scaling.
+    # Statistical reasoning:
+    # - For the same relative precision in per-round error rate, you might need errors ∝ num_rounds^2
+    # - However, with more rounds, shot error rate increases (you collect errors faster)
+    # - For consistent statistical confidence regardless of rounds, you might NOT need scaling
+    #
+    # Options:
+    # - tau_power = 0.0: No scaling - same number of errors regardless of rounds
+    #   → Same statistical confidence in per-round estimate (if per-round rate is similar)
+    # - tau_power = 1.0: Linear scaling - 2x rounds → 2x errors (current default)
+    #   → Practical compromise: accounts for higher shot error rates with more rounds
+    # - tau_power = 2.0: Quadratic scaling - 2x rounds → 4x errors
+    #   → For same relative precision in per-round estimate
+    #
+    # Current choice (linear) is a practical compromise, but NOT strictly necessary.
+    # If you want consistent statistical confidence regardless of rounds, use tau_power = 0.0.
     tau_power = 1.0  # Linear scaling: 2x rounds → 2x errors
+    # Alternative: tau_power = 0.0  # No scaling: same errors regardless of rounds
     
     tau_scale = (tau_rounds / BASELINE_ROUNDS) ** tau_power
+    # To disable scaling with rounds, uncomment:
     # tau_scale = 1.0
     
     # Scale with error_rate (lower rates need fewer errors)
     # Use square (power of 2) to get more aggressive scaling at low rates
     # At error_rate=0.001, we want ~1/100 the errors of error_rate=0.01
     # (0.001/0.01)^2 = 0.1^2 = 0.01 = 1/100
-    error_rate_scale = (error_rate / BASELINE_ERROR_RATE) ** 0.5
-    # error_rate_scale = 1.0
+    # error_rate_scale = (error_rate / BASELINE_ERROR_RATE) ** 0.5
+    error_rate_scale = 1.0
     
     # Combine scales
     max_errors = int(BASELINE_MAX_ERRORS * tau_scale * error_rate_scale)
@@ -93,7 +100,13 @@ def calculate_max_shots(error_rate: float, tau_rounds: int) -> int:
     """
     Calculate MAX_SHOTS based on error_rate and tau_rounds.
     
-    Scales proportionally with MAX_ERRORS to ensure enough shots to reach target.
+    IMPORTANT: MAX_SHOTS needs to scale INVERSELY with error_rate:
+    - Small error rates (0.001): Need MANY shots to collect errors (errors are rare)
+    - Large error rates (0.007): Collect errors quickly, so fewer shots needed
+    
+    Strategy:
+    - Scale with MAX_ERRORS (proportional): More errors need more shots
+    - Scale INVERSELY with error_rate: Small rates need more shots to collect errors
     
     Args:
         error_rate: Physical error rate (e.g., 0.001, 0.01)
@@ -103,9 +116,20 @@ def calculate_max_shots(error_rate: float, tau_rounds: int) -> int:
         Maximum number of shots to run for this error_rate and tau_rounds
     """
     max_errors = calculate_max_errors(error_rate, tau_rounds)
-    # Scale proportionally: maintain same ratio as baseline
-    max_shots = int(BASELINE_MAX_SHOTS * (max_errors / BASELINE_MAX_ERRORS))
-    return max_shots
+    
+    # Scale proportionally with MAX_ERRORS: more errors need more shots
+    shots_from_errors = BASELINE_MAX_SHOTS * (max_errors / BASELINE_MAX_ERRORS)
+    
+    # Scale INVERSELY with error_rate: small rates need MORE shots to collect errors
+    # At error_rate=0.001, you need ~10x more shots than at 0.01 to collect the same errors
+    # Use square root scaling for a reasonable compromise (not too aggressive)
+    error_rate_inverse_scale = (BASELINE_ERROR_RATE / error_rate) ** 0.5
+    
+    max_shots = int(shots_from_errors * error_rate_inverse_scale)
+    
+    # Ensure minimum: at least enough shots to potentially see errors
+    min_shots = max(1_000_000, max_errors * 100)  # At least 100× max_errors
+    return max(min_shots, max_shots)
 
 # Default values (for backward compatibility and simple cases)
 # These are calculated for the default TAU_ROUNDS and a moderate error rate (0.5%)

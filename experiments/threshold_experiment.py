@@ -186,10 +186,15 @@ def save_experiment_summary(
         
         f.write("Per-Task Statistics:\n")
         f.write("-" * 80 + "\n")
+        f.write("Note: 'Errors' = logical errors (decoder failures), not physical errors.\n")
+        f.write("      Logical error rate = Errors / Shots\n")
+        f.write("-" * 80 + "\n")
         for i, task in enumerate(task_stats, 1):
+            logical_error_rate = task['errors'] / task['shots'] if task['shots'] > 0 else 0.0
             f.write(f"Task {i}:\n")
-            f.write(f"  L: {task['L']}, Error Rate: {task['error_rate']}, Decoder: {task['decoder']}\n")
-            f.write(f"  Shots: {task['shots']:,}, Errors: {task['errors']:,}\n")
+            f.write(f"  L: {task['L']}, Physical Error Rate: {task['error_rate']}, Decoder: {task['decoder']}\n")
+            f.write(f"  Shots: {task['shots']:,}, Logical Errors: {task['errors']:,}\n")
+            f.write(f"  Logical Error Rate: {logical_error_rate:.2e} ({logical_error_rate*100:.4f}%)\n")
             f.write(f"  Time: {task['seconds']:.2f}s, Throughput: {task['shots_per_second']:,.0f} shots/s\n")
             f.write("\n")
         
