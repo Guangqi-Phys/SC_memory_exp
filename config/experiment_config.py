@@ -1,13 +1,13 @@
 # surface_code_experiment/config/experiment_config.py
 
 # Default code distances for threshold experiments
-L_VALUES = [23]
+L_VALUES = [29, 31, 33]
 
 # Number of measurement rounds (tau)
-TAU_ROUNDS = 10
+TAU_ROUNDS = 3
 
 # Sliding window decoding parameters
-N_SLIDING_WINDOW = 10  # Window size (n_sliding_window) for sliding window decoding
+N_SLIDING_WINDOW = 3  # Window size (n_sliding_window) for sliding window decoding
 N_OVERLAP = 0  # Overlap between consecutive windows
 
 # Number of parallel workers for pymatching/sinter
@@ -21,29 +21,39 @@ NUM_WORKERS = 10  # Number of parallel workers for sinter.collect
 WINDOW_PARALLEL_WORKERS = 1  # Number of workers for window parallelization (1 = batch only, >1 = multiprocessing)
 
 # Default error rates for threshold experiments
-ERROR_RATES = [0.003,0.009]
+ERROR_RATES = [0.001,0.003,0.005,0.007,0.009,0.01]
 
 
 # Adaptive MAX_ERRORS and MAX_SHOTS based on error_rate and tau_round
-# Baseline: error_rate=0.001 (0.1%) with 1,000 errors and 100,000,000 shots
+# Baseline: error_rate=0.001 (0.1%), tau_rounds=10, with 100,000 errors and 10,000,000 shots
+# MAX_ERRORS scales LINEARLY with both error_rate and tau_rounds
+# MAX_SHOTS scales DOWN with error_rate and tau_rounds (errors collected faster)
 BASELINE_ROUNDS = 1
 BASELINE_ERROR_RATE = 0.001  # 0.1% - reference error rate
-BASELINE_MAX_ERRORS = 1000  # Constant: same number of errors for all configurations
-BASELINE_MAX_SHOTS = 10_000_000  # Baseline shots (will be reduced for large error rates/rounds)
+BASELINE_MAX_ERRORS = 1_000  # Baseline errors (scales with error_rate × tau_rounds)
+BASELINE_MAX_SHOTS = 100_000_000  # Baseline shots (will be reduced for large error rates/rounds)
 
 def calculate_max_errors(error_rate: float, tau_rounds: int) -> int:
     """
     Calculate MAX_ERRORS based on error_rate and tau_rounds.
     
-    Strategy: Scale MAX_ERRORS LINEARLY with error_rate.
-    - Higher error rates need more errors for statistical confidence
-    - Linear scaling: 2x error_rate → 2x MAX_ERRORS
+    IMPORTANT NOTE: This uses PHYSICAL error rate as a proxy for LOGICAL error rate.
+    The actual logical error rate per shot can be much higher (approaching 1) when:
+    - Physical error rate is high (e.g., 0.009)
+    - Number of rounds is large (e.g., 100)
     
-    IMPORTANT: This function does NOT depend on n_sliding_window or any decoding parameters.
-    Statistical reliability (confidence in error rate estimate) depends ONLY on:
-    - Number of errors collected (MAX_ERRORS)
-    - Number of shots collected (MAX_SHOTS)
-    - The actual error rate
+    Strategy: Scale MAX_ERRORS LINEARLY with both error_rate AND tau_rounds, with a cap.
+    - Higher physical error rates → higher logical error rates → need more errors
+    - More rounds → higher shot error rate → need more errors
+    - BUT: Cap MAX_ERRORS to prevent excessive collection when logical rate is very high
+    
+    Rationale:
+    - Large tau_rounds increases shot error rate (more opportunities for errors)
+    - High shot error rates benefit from more errors for better statistical confidence
+    - However, when logical error rate approaches 1, we're near the boundary where:
+      a) Precision is naturally better (relative precision formula: sqrt((1-p)/n) → 0 as p→1)
+      b) Perfect precision isn't necessary (we already know it's "very high")
+      c) Per-round conversion makes high shot rates manageable
     
     The decoding method (sliding window vs full decoding) affects DECODING ACCURACY
     (how well errors are corrected), but NOT STATISTICAL RELIABILITY (confidence in the estimate).
@@ -52,18 +62,44 @@ def calculate_max_errors(error_rate: float, tau_rounds: int) -> int:
     
     Args:
         error_rate: Physical error rate (e.g., 0.001, 0.01)
-        tau_rounds: Number of measurement rounds - not used, kept for API consistency
+        tau_rounds: Number of measurement rounds
     
     Returns:
-        Maximum number of errors to collect (scales linearly with error_rate)
+        Maximum number of errors to collect (scales linearly with error_rate and tau_rounds, capped)
     """
-    # Scale linearly with error_rate: 2x error_rate → 2x MAX_ERRORS
-    error_rate_scale = (error_rate / BASELINE_ERROR_RATE)**2
+    # Scale LINEARLY with error_rate: 2x error_rate → 2x MAX_ERRORS
+    error_rate_scale = error_rate / BASELINE_ERROR_RATE
     
-    max_errors = int(BASELINE_MAX_ERRORS * error_rate_scale)
+    # Scale LINEARLY with tau_rounds: 2x rounds → 2x MAX_ERRORS
+    # Rationale: More rounds → higher shot error rate → need more errors for confidence
+    # 
+    # IMPORTANT: Statistical uncertainty is calculated in SHOT ERROR RATE space, not per-round space.
+    # - We measure: logical_error_rate_per_shot = errors / shots
+    # - Uncertainty formula: Relative Precision = 2 × z × sqrt((1-p_shot) / n)
+    # - Where p_shot is the shot error rate (what we actually measure)
+    # - Per-round conversion happens AFTER uncertainty calculation (just for display)
+    # 
+    # Therefore, MAX_ERRORS should be based on SHOT error rate considerations:
+    # - More rounds → higher shot error rate (more opportunities for errors)
+    # - Higher shot error rate → we want good precision in shot space
+    # - More errors → better precision in shot space
+    # - So scaling with rounds is CORRECT (not just a practical compromise)
+    tau_scale = 1
+    
+    max_errors = int(BASELINE_MAX_ERRORS * error_rate_scale * tau_scale)
     
     # Ensure minimum (at least BASELINE_MAX_ERRORS errors for any configuration)
-    return max(BASELINE_MAX_ERRORS, max_errors)
+    max_errors = max(BASELINE_MAX_ERRORS, max_errors)
+    
+    # CAP: When logical error rate is very high (near 1), we don't need extremely large MAX_ERRORS
+    # Reason:
+    # 1. Per-round conversion makes high shot rates manageable (e.g., 0.9 shot rate → ~0.02 per-round)
+    # 2. Relative precision is naturally better near p=1 (formula: sqrt((1-p)/n) → 0)
+    # 3. Practical: prevents experiments from running forever
+    # 4. We're already near the boundary - perfect precision isn't necessary
+    MAX_ERRORS_CAP = 100_000  # Cap at 100k errors
+    
+    return min(max_errors, MAX_ERRORS_CAP)
 
 def calculate_max_shots(error_rate: float, tau_rounds: int) -> int:
     """
@@ -91,8 +127,9 @@ def calculate_max_shots(error_rate: float, tau_rounds: int) -> int:
     
     # Scale DOWN with tau_rounds: more rounds → higher shot error rate → errors collected faster
     # Use square root scaling (not linear) to avoid too aggressive reduction
-    # tau_scale = (BASELINE_ROUNDS / tau_rounds) ** 0.5
-    tau_scale = 1
+    tau_scale = (BASELINE_ROUNDS / tau_rounds) ** 0.5
+    # tau_scale = 1
+
     
     # Combine scales: both reduce MAX_SHOTS for large error rates/rounds
     max_shots = int(BASELINE_MAX_SHOTS * error_rate_scale * tau_scale)

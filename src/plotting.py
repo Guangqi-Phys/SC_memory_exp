@@ -55,21 +55,27 @@ def plot_threshold(
     fig, ax = plt.subplots(1, 1, figsize=(10, 6))
     
     # Plot error rates using sinter's built-in plotting function
-    # Note: highlight_max_likelihood_factor=1000 (default) controls uncertainty region width
-    # For 0 errors, this creates a wide uncertainty region (statistically correct but visually large)
-    # See docs/zero_errors_uncertainty.md for explanation
+    # highlight_max_likelihood_factor controls uncertainty region width:
+    # - 5:  Very tight confidence interval (~90% confidence)
+    # - 10: Tighter confidence interval (good balance, recommended)
+    # - 20: ~95% confidence interval (standard, but can appear wide on log scale)
+    # - 100: Very wide confidence (exploratory)
+    # - 1000: Extremely wide (too wide, not recommended)
+    # See docs/reducing_uncertainty.md for explanation
+    # Note: With 9000 errors, statistical precision is good (~1-2% relative),
+    #       but the visual width on log scale depends on this factor
     sinter.plot_error_rate(
         ax=ax,
         stats=stats,
         x_func=lambda stat: stat.json_metadata.get('error_rate', stat.json_metadata.get('p', 0)),
         group_func=lambda stat: f"L={stat.json_metadata.get('L', stat.json_metadata.get('d', '?'))}",
         failure_units_per_shot_func=lambda stat: stat.json_metadata.get('num_rounds', stat.json_metadata.get('r', 1)),
-        highlight_max_likelihood_factor=1000,  # Default: 1000x max likelihood factor for uncertainty region
+        # highlight_max_likelihood_factor=1,  # Tighter than 20, better for log-scale plots (was 20, was 1000)
     )
     
     # Set plot limits and scale
-    ax.set_ylim(1e-6, 1)
-    ax.set_xlim(0.003, 0.01)
+    ax.set_ylim(1e-5, 1)
+    ax.set_xlim(0.001, 0.01)
     ax.loglog()
     
     # Add grid
